@@ -2,7 +2,6 @@ import fetch from 'node-fetch';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import csv from 'csv-parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,12 +9,6 @@ const __dirname = path.dirname(__filename);
 
 // API KEY DE JINA
 const JINA_API_KEY = '';
-
-const args = process.argv.slice(2);
-
-let pathToFile = args[0]; //path recibido como parametro con la dirección del fichero
-let linkType = args[1] || 'all';
-let outputFolder = args[2] || 'Files_LLM';
 
 // Función para realizar la petición a la API de Jina AI con la API key
 async function fetchData(url) {
@@ -39,33 +32,25 @@ async function fetchData(url) {
     }
 }
 
-/**
- * Obtiene los datos a partir de un documento CSV
- * @param {*} filepath path con la dirección del fichero del que extraer las URL
- * @param {*} linkType tipo de URL que se quieren extraer [internal, external, all]
- * @returns 
- */
-async function readUrlsFromCsv(filepath, linkType = 'all') {
-    return new Promise((resolve, reject) => {
-        const filteredURLs = [];
-        fs.createReadStream(path.resolve(filepath))
-            .pipe(csv({headers: false}))
-            .on('data', (row) => {
-                const type = row[0]; // índice 0 para el tipo
-                const url = row[1];  // índice 1 para la URL
-                if (!url) return; // Si no hay URL, salta
-                if (linkType === 'all' || type === linkType) {
-                    filteredURLs.push(url); // Agrega la URL si cumple la condición
-                }
-            })
-            .on('end', () => {
-                console.log(filteredURLs); // Opcional: muestra las URLs filtradas
-                resolve(filteredURLs); // Resuelve la promesa con las URLs filtradas
-            })
-            .on('error', (error) => {
-                reject(`Error al leer el archivo CSV: ${error}`);
-            });
-    });
+function readUrlsFromCsv(filepath, linkType = 'all'){
+    const csvFile = fs.readFileSync(path.resolve(filepath), 'utf8')
+
+    // Parsea el contenido del csv
+    const records = parse(csvFile,{
+        skip_empty_lines: true
+    })
+
+    const filteredURL = records.filter(record => {
+        const type = record[0] //columna 1 asociada al tipo de url
+        const url = record[1] //columna 2 asociada a las url 
+        if(!url) return false;
+        if(linkType == 'all') return true;
+
+        //Filtrar por internal/external
+        return type === linkType;
+    }).map(record => record[1]);
+
+    return filteredURL;
 }
 
 
@@ -75,7 +60,7 @@ function formatTitle(data) {
     const titleMatch = data.match(/Title:\s*(.+)/);
     if (titleMatch) {
         // Reemplazar espacios por guiones bajos y devolver el resultado
-        return titleMatch[1].trim().replace(/[^a-zA-Z0-9_.-]/g, '_'); // Sanitiza el títuloclea
+        return titleMatch[1].trim().replace(/ /g, '_');
     }
     return 'sin_titulo'; // Título por defecto si no se encuentra
 }
@@ -85,12 +70,7 @@ function formatTitle(data) {
 function saveAsMarkdown(data) {
     const title = formatTitle(data); // Obtener el título formateado
     const filename = `${title}.md`; // Usar el título como nombre de archivo
-    const outputDir = path.join(__dirname, outputFolder); //Path del fichero dónde guardar los datos
-    //Comprueba si existe o no esa carpeta, si no existe crea una
-    if(!fs.existsSync(outputDir)){
-        fs.mkdirSync(outputDir)
-    }
-    const filePath = path.join(outputDir,filename); //Genera el path de guardado de fichero en la carpeta creada
+    const filePath = path.join(__dirname, `${filename}`);
 
     // Guardamos el contenido tal como lo recibimos
     fs.writeFileSync(filePath, data, 'utf8');
@@ -100,7 +80,6 @@ function saveAsMarkdown(data) {
 // Función principal que recibe un array de URLs y ejecuta el proceso
 async function processUrls(urls) {
     for (const url of urls) {
-        console.log("analizando url")
         const data = await fetchData(url);
         if (data) {
             saveAsMarkdown(data);
@@ -108,8 +87,20 @@ async function processUrls(urls) {
     }
 }
 
-// Array de URLs que se genera llamando a la funcion que analiza el fichero .csv
-const urls = await readUrlsFromCsv(pathToFile, linkType);
+// Array de URLs de ejemplo
+const urls = [
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_memory.html', 
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_partitions.html',
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_qos.html',
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_examples.html',
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_job_array.html',
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_multiple_tasks.html',
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_binding_tasks_specifics_cores.html',
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_jobs_states.html',
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_stdout_err.html',
+    'https://cesga-docs.gitlab.io/ft3-user-guide/batch_email_warning.html'
+
+];
 
 // Ejecutar el script
 processUrls(urls);

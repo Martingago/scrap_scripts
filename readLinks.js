@@ -94,10 +94,10 @@ function extractLinks(html, baseUrl) {
 function writeLinksToCsv(links, filename){
     let csvContent = '';
     links.internal.forEach(element => {
-        csvContent += `${element},\n`
+        csvContent += `internal,${element},\n`
     });
     links.external.forEach(element => {
-        csvContent += `${element},\n`
+        csvContent += `external,${element},\n`
     })
 
     fs.writeFileSync(filename, csvContent,'utf8');
